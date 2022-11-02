@@ -1,0 +1,313 @@
+#!/usr/bin/env python
+# coding: utf-8
+Кузнецов Вячеслав, БЛГ-182
+В полученном файле содержались данные о мигрантах, умерших или пропавших без вести на территории другой чужой страны. Основной целью работы является выявление основных критериев человека, чья жизнь потенциально находится под угрозой после того, как он пересек границу.
+
+По результатам проделанной работы были можно сформулировать следующее описание человека, чья жизнь потенциально находится под угрозой:
+1) Покинул(-а) Африку;
+2) Пересекает Средиземное Море;
+3) Пребывает на территории/границе США и Мексики.
+
+
+Описание набора данных: csv файл, данные разделены запятой, содержит информацию о случаях пропажи людей без вести.
+# Загружаем в питон необходимые для анализа библиотеки.
+
+# In[1]:
+
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+
+# Загружаем файл и меняем кодировку из-за возникновения ошибок при чтении файла.
+
+# In[2]:
+
+
+migrants = pd.read_csv('MissingMigrantsProject.csv', encoding = 'latin-1')
+
+
+# Проводим первичный осмотр данных, сразу видны пропущенные значения.
+
+# In[3]:
+
+
+migrants
+
+
+# Проверяем файл на наличие дубликатов и анализируем пустые значения.
+
+# In[4]:
+
+
+migrants.isnull().sum()
+
+
+# In[5]:
+
+
+migrants.duplicated().sum()
+
+
+# Дубликатов выявлено не было, пустые значения присутствуют в каждом столбце, за исключением id.
+
+# Самое большое количество пустых значений было обнаружено в столбцах affected_nationality и missing. Было принято решение убрать первый из рассматриваемых столбцов, по причине невозможности установить или как-либо заменить значения в этом столбце.
+
+# In[6]:
+
+
+migrants = migrants.drop(columns = ['affected_nationality'])
+
+
+# Иследовав данные столбцов missing и dead, было допущено, что в пропусках должны стоять нули.
+# (если есть данные о количестве мертвых, но нет о пропавших - пропавшие отсутствуют; и наоборот)
+# Выведя все возможные варианты значений столбца reliability было допущено, что вместо пропущенных значений должно стоять Unverified.
+# (раз данных о них нет, значит подтверждений им тоже нет)
+# Значения Partially verified в этом же столбце были заменены на Partially Verified для более корректного отображения информации.
+# Пустые значения в столбцах cause_of_death и region_origin были заполнены Unknown, поскольку никакой возможности установить их нет.
+
+# In[7]:
+
+
+migrants['missing'] = migrants['missing'].fillna(0)
+migrants['dead'] = migrants['dead'].fillna(0)
+migrants['reliability'] = migrants['reliability'].fillna('Unverified')
+migrants.loc[migrants['reliability'] == 'Partially verified', 'reliability'] = 'Partially Verified'
+migrants['cause_of_death'] = migrants['cause_of_death'].fillna('Unknown')
+migrants['region_origin'] = migrants['region_origin'].fillna('Unknown')
+
+
+# Ищем пустые значения в столбце incident_region.
+
+# In[8]:
+
+
+migrants[migrants['incident_region'].isnull()]
+
+
+# Видим, что в 5 строках файла отсутствуют какие-либо данные, кроме id и координат.
+# Это означает, что никакой ценности они не представляют и их можно удалить.
+
+# In[9]:
+
+
+migrants = migrants.drop(labels=[459, 639, 1132, 1133, 1134, 1213], axis=0)
+migrants[migrants['incident_region'].isnull()]
+
+
+# Руководствуясь вариантами из столбцов lat и lon, определяем возможные значения столбца incident region исходя из предложенных вариантов с помощью гугл карт.
+
+# In[10]:
+
+
+migrants.loc[migrants['id'] == 397, 'incident_region'] =  'Southeast Asia'
+migrants.loc[migrants['id'] == 14564, 'incident_region'] =  'Mediterranean'
+migrants.loc[migrants['id'] == 19778, 'incident_region'] =  'Europe'
+migrants.loc[migrants['id'] == 27375, 'incident_region'] =  'Central America & Mexico'
+
+
+# Координаты нам больше не нужны, удаляем столбцы.
+
+# In[11]:
+
+
+migrants = migrants.drop(columns = ['lat'])
+migrants = migrants.drop(columns = ['lon'])
+
+
+# Исправляем расхождения в названиях регионов в столбцах и объединяем Horn of Africa (P) с Horn of Africa.
+
+# In[12]:
+
+
+migrants.loc[migrants['region_origin'] == 'Central America', 'region_origin'] = 'Central America & Mexico'
+migrants.loc[migrants['region_origin'] == 'Horn of Africa (P)', 'region_origin'] = 'Horn of Africa'
+migrants.loc[migrants['incident_region'] == 'Central America incl. Mexico', 'incident_region'] = 'Central America & Mexico'
+
+
+# Анализируем пропуски в столбце date, заполняем их ближайшими датами по номеру id.
+# Данное действие не является критичным, поскольку впоследствии нам будет важен только год и месяц.
+
+# In[13]:
+
+
+migrants.loc[migrants['id'] == 14564, 'date'] =  '11/12/2015'
+migrants.loc[migrants['id'] == 19778, 'date'] =  '17/12/2015'
+migrants.loc[migrants['id'] == 27375, 'date'] =  '20/11/2015'
+
+
+# Источник информации нам так же определить не удастся, заменяем оставшееся пустое значение в столбце source на Unknown
+
+# In[14]:
+
+
+migrants.loc[migrants['id'] == 182347, 'source'] =  'Unknown'
+
+
+# После всех проведенных преобразований получаем следующий результат по пропускам:
+
+# In[15]:
+
+
+migrants.isnull().sum()
+
+
+# Добавим два новых столбца в фрейм для визуализации.
+
+# In[16]:
+
+
+migrants['date'] = pd.to_datetime(migrants['date'])
+migrants['year'], migrants['month'] = migrants['date'].dt.year, migrants['date'].dt.month
+migrants
+
+
+# In[17]:
+
+
+# Plot
+plt.figure(figsize=(12,10), dpi= 80)
+sns.heatmap(migrants.corr(), xticklabels=migrants.corr().columns, yticklabels=migrants.corr().columns, cmap='RdYlGn', center=0, annot=True)
+
+# Decorations
+plt.title('Корреляция', fontsize=22)
+plt.xticks(fontsize=12)
+plt.yticks(fontsize=12)
+plt.show()
+
+
+# Наиболее выраженная зависимость прослеживается между id и year.
+
+# In[18]:
+
+
+mig_g = migrants.groupby('year')['id'].count()
+mig_g
+
+
+# In[19]:
+
+
+mig_g.plot(xticks = mig_g.index)
+
+
+# Наибольшее количество инцидентов было выявлено в 2016 году.
+
+# In[20]:
+
+
+mig_g1 = migrants.groupby('month')['id'].count()
+mig_g1
+
+
+# In[21]:
+
+
+mig_g1.plot(xticks = mig_g1.index)
+
+
+# In[22]:
+
+
+inc_g = migrants.groupby('incident_region', as_index = False)[['missing', 'dead']].sum()
+inc_g
+
+
+# In[23]:
+
+
+ori_g = migrants.groupby('region_origin', as_index = False)[['missing', 'dead']].sum()
+ori_g
+
+
+# In[24]:
+
+
+plt.rcParams['figure.figsize'] = [20, 5]
+inc_g.plot.line(x= 'incident_region', y=['missing', 'dead'])
+
+
+# In[25]:
+
+
+plt.rcParams['figure.figsize'] = [20, 5]
+ori_g.plot.line(x= 'region_origin', y=['missing', 'dead'])
+
+
+# Основная масса пропаж и смертей произошла в регионе Средиземное Море, при этом большая часть пропавших или умерших,
+# за исключением неизвестных, - изначально покинули Африку.
+
+# Причин смерти слишком много для адекватной оценки, поэтому попробуем построить диаграмму на основании только 10 наиболее частых причин смертей:
+
+# In[26]:
+
+
+plt.suptitle('Диаграмма наиболее частые причины смертей')
+plt.rcParams['figure.figsize'] = [5, 5]
+
+migrants['cause_of_death'].value_counts()[:10].plot.pie( y = migrants['cause_of_death'])
+plt.ylabel("")
+plt.show()
+
+
+# Выясним самую частую причину смерти в 2016 году, ей оказалась Drowning.
+
+# In[27]:
+
+
+plt.suptitle('Диаграмма наиболее частые причины смертей в 2016 году')
+plt.rcParams['figure.figsize'] = [5, 5]
+
+subset = migrants[migrants['year'] == 2016]
+
+subset['cause_of_death'].value_counts()[:10].plot.pie( y = subset['cause_of_death'])
+plt.ylabel("")
+plt.show()
+
+
+# Теперь проанализируем, в каких регионах чаще всего происходят происшествия, ведущие к смерти:
+
+# In[28]:
+
+
+plt.suptitle('Количество смертей в каждом из регионов', fontsize = 22)
+plt.rcParams['figure.figsize'] = [30, 10]
+subset = migrants[migrants['dead'] == 1]
+sns.countplot( y='incident_region', data=subset, palette = 'twilight_shifted')
+plt.show()
+
+
+# Наибольшее число смертей зафиксировано на границе США и Мексики, территории США и Мексики,
+# Средиземном море и Северной Африке.
+
+# Так же рассмотрим, в каких регионах причиной смерти чаще всего служит стрельба:
+
+# In[29]:
+
+
+plt.suptitle('Количество смертей из-за стрельбы в каждом из регионов', fontsize = 22)
+plt.rcParams['figure.figsize'] = [30, 10]
+subset = migrants[migrants['cause_of_death'] == 'Shot']
+sns.countplot( y='incident_region', data=subset, palette = 'twilight_shifted')
+plt.show()
+
+
+# Наибольшее количество смертей из-за стрельбы отмечается на Среднем Западе.
+
+# Составим топ 10 газет, которые чаще всего предоставляют непроверенную информацию:
+
+# In[30]:
+
+
+plt.suptitle('Диаграмма газеты, чаще всего предоставляющие недостоверную информацию', fontsize = 22)
+plt.rcParams['figure.figsize'] = [20, 20]
+
+subset = migrants[migrants['reliability'] == "Unverified"]
+subset['source'].value_counts()[:10].plot.pie( y = subset['source'])
+plt.ylabel("")
+plt.show()
+
+
+# Газета, в которой чаще всего публикуется недостоверная информация, - Regional Mixed Migration Secretariat.
